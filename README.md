@@ -41,20 +41,18 @@ debug 构建保留控制台，并提供一个仅调试用的环境变量：
 
 | 模块 | 职责 |
 |---|---|
-| `src/main.rs` | 入口、消息循环、panic hook |
+| `src/main.rs` | 入口、panic hook |
+| `src/sys/` | Win32 FFI 唯一边界：`window` / `message` / `gdi` / `drawing` / `tray` / `time` |
 | `src/app.rs` | `AppState`、wndproc、定时器、拖拽、托盘事件 |
-| `src/window.rs` | 窗口类注册/创建、分层 alpha、圆角区域 |
-| `src/tray.rs` | 托盘图标 RAII、右键菜单（`TPM_RETURNCMD`） |
-| `src/paint.rs` | `BeginPaint/EndPaint` 与面板绘制 |
+| `src/paint.rs` | 面板布局与绘制流程 |
 | `src/segments.rs` | 七段数码管位掩码、几何与共享 GDI 调色板 |
-| `src/gdi.rs` | GDI 对象 RAII、`SelectObject` 恢复守卫、`rgb()` |
-| `src/time.rs` | `GetLocalTime`、`HH:MM:SS` 格式化、整点距离 |
+| `src/time.rs` | 本地时间、`HH:MM:SS` 格式化、整点距离 |
 | `src/schedule.rs` | 可见性策略（含启动行为对齐） |
 | `src/fade.rs` | 纯 alpha 动画状态机 |
-| `src/consts.rs` | 窗口/布局/颜色/ID 常量 |
+| `src/consts.rs` | 窗口/布局/颜色/ID 常量、`rgb()` |
 
 ## 说明与限制
 
 - 时间基于 `GetLocalTime` 每秒重算，不依赖步进计数，睡眠唤醒后不会漂移。
 - 目前不做高 DPI、多显示器、开机自启、配置持久化与单实例。
-- 这是学习项目，直接在 Win32 消息模型上实现；FFI 调用集中在少数模块，业务逻辑（`time` / `fade` / `schedule` / `segments`）可单元测试。
+- 这是学习项目，直接在 Win32 消息模型上实现；FFI 全部集中在 `src/sys/`，由 `#![deny(unsafe_code)]` 防止扩散；业务逻辑（`time` / `fade` / `schedule` / `segments`）可单元测试。

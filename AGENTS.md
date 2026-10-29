@@ -33,11 +33,11 @@ TD_FORCE_SHOW=1 cargo run   # debug 强制显示，免等整点；release 会忽
 
 单窗口、消息驱动，没有 async 运行时或 GUI 框架。
 
-- `src/main.rs`：获取 hInstance、注册窗口类、创建窗口、`GetMessageW` 循环、panic hook。
-- `src/window.rs`：注册 `WNDCLASSEXW`；创建 `WS_POPUP` + `WS_EX_LAYERED|TOOLWINDOW|TOPMOST` 窗口，设置圆角区域、初始 alpha=0、位置 (10,10)、1 秒 `DATE_TIMER_ID`，最后显示窗口。
-- `src/app.rs`：全部消息分发。`AppState` 在 `WM_CREATE` 以 `Box::into_raw` 存入 `GWLP_USERDATA`，`WM_NCDESTROY` 取回释放；不要改成全局 `static`。
+- `src/main.rs`：入口与 panic hook；在这里开启 `#![deny(unsafe_code)]`，只有 `app`、`sys` 两个模块带 `#[allow(unsafe_code)]`。
+- `src/sys/`：Win32 FFI 的唯一边界，按功能拆分：`window`（窗口类注册/创建、窗口操作、用户数据槽）、`message`（消息循环与错误提示）、`gdi`（`OwnedGdi`/`Selected`）、`drawing`（`PaintScope` 与绘制原语）、`tray`（托盘图标与右键菜单）、`time`（本地时间）。对外只暴露安全函数，新增 Win32 调用只加到这里。
+- `src/app.rs`：全部消息分发。`AppState` 在 `WM_CREATE` 以 `Box::into_raw` 存入 `GWLP_USERDATA`，`WM_NCDESTROY` 取回释放；不要改成全局 `static`。本模块保留三处无法安全化的 `unsafe`：`wndproc` 的 `unsafe extern "system"` 签名、`with_state` 的裸指针解引用、`Box::from_raw` 回收。
 - 两个定时器：`DATE_TIMER_ID` 每秒从 `GetLocalTime` 重算可见性并 `InvalidateRect`；`ANIMATION_TIMER_ID` 每 10ms 推进 alpha（每帧 ±5，约 0.5 秒完成）。
-- `src/tray.rs`：托盘图标 RAII（`NIM_ADD` / `NIM_DELETE`）。右键菜单使用 `TPM_RETURNCMD` **同步返回命令 ID**，避免 `TrackPopupMenu` 泵消息时递归派发 `WM_COMMAND`；`WM_COMMAND` 只保留退出防御分支。
+- 托盘（`sys`）：图标 RAII（`NIM_ADD` / `NIM_DELETE`）。右键菜单使用 `TPM_RETURNCMD` **同步返回命令 ID**，避免 `TrackPopupMenu` 泵消息时递归派发 `WM_COMMAND`；`WM_COMMAND` 只保留退出防御分支。
 - 重入规则：绝不跨 `TrackPopupMenu`、`DestroyWindow`、`MessageBoxW` 持有 `&mut AppState`；`with_state` 只做短借用。
 
 ### 纯逻辑（可单元测试）
@@ -49,8 +49,8 @@ TD_FORCE_SHOW=1 cargo run   # debug 强制显示，免等整点；release 会忽
 
 ### 渲染与 GDI 所有权
 
-- `src/paint.rs`：`PaintScope` 保证 `BeginPaint/EndPaint` 配对；每次绘制创建一个共享 `Palette`（面板/点亮/未点亮各一组 brush+pen）。
-- `src/gdi.rs`：`OwnedGdi` 独占句柄，`Selected<'a>` 守卫在 Drop 时恢复旧对象。声明顺序必须保证守卫先于 GDI 对象析构，否则会删除仍被选入 DC 的对象。不要把 GDI 对象存进 `AppState` 或跨 `WM_PAINT` 缓存。
+- `src/paint.rs`：面板布局与绘制流程；每次绘制创建一个共享 `Palette`（面板/点亮/未点亮各一组 brush+pen）。`PaintScope`（`BeginPaint/EndPaint` 配对）在 `sys::drawing` 中。
+- `sys::gdi::OwnedGdi` / `sys::gdi::Selected<'a>`：`OwnedGdi` 独占句柄，`Selected<'a>` 守卫在 Drop 时恢复旧对象。声明顺序必须保证守卫先于 GDI 对象析构，否则会删除仍被选入 DC 的对象。不要把 GDI 对象存进 `AppState` 或跨 `WM_PAINT` 缓存。
 - `SetWindowRgn` 成功后 region 所有权归系统，只在失败时 `DeleteObject`。
 
 ## 行为不变量
@@ -64,9 +64,9 @@ TD_FORCE_SHOW=1 cargo run   # debug 强制显示，免等整点；release 会忽
 ## 兼容性与易错点
 
 - `windows` 0.61.3：许多 API 返回 `Result`；`BOOL` 用 `.0` 或 `.as_bool()`。`GetMessageW` 的错误是 `BOOL(-1)`，必须判 `.0 == -1`，不能只看 `as_bool()`。
-- 新增 Win32 API 时，需要在 `Cargo.toml` 的 `windows` features 中加入对应模块，否则符号不存在。
+- 新增 Win32 API 时，需要在 `Cargo.toml` 的 `windows` features 中加入对应模块，否则符号不存在；调用一律写进 `src/sys/` 下对应的子模块，业务模块直接写 `unsafe` 会被 `#![deny(unsafe_code)]` 拒绝编译。
 - 宽字符串用 `windows::core::w!`；资源 ID 用 `PCWSTR(IDI_ICON as *const u16)`。
 - `WM_TRAY_ICON` 采用 legacy 语义：`lParam` 低 16 位是鼠标消息。
-- edition 2024 的 `unsafe_op_in_unsafe_fn`：wndproc 内部的 unsafe 调用需要显式 `unsafe {}` 块。
+- edition 2024 的 `unsafe_op_in_unsafe_fn`：`wndproc` 内部仅剩的 `Box::from_raw` 调用需要显式 `unsafe {}` 块。
 - 项目有意不做高 DPI、多显示器、开机自启、设置窗口、配置持久化、单实例；不要顺手加入这些功能。
 - 注释与用户可见文本使用中文，保持现有风格。依赖保持最小化，`windows` 和 `embed-resource` 使用精确版本，`Cargo.lock` 提交在仓库中。

@@ -1,4 +1,4 @@
-use windows::Win32::System::SystemInformation::GetLocalTime;
+use crate::sys::time::local_hms;
 
 /// 本地时间，只保留时钟显示需要的字段。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,12 +10,11 @@ pub struct ClockTime {
 
 impl ClockTime {
     pub fn now() -> Self {
-        // SAFETY: GetLocalTime 无参数、无失败路径。
-        let st = unsafe { GetLocalTime() };
+        let (hour, minute, second) = local_hms();
         Self {
-            hour: st.wHour as u8,
-            minute: st.wMinute as u8,
-            second: st.wSecond as u8,
+            hour,
+            minute,
+            second,
         }
     }
 

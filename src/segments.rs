@@ -1,7 +1,8 @@
-use windows::Win32::Graphics::Gdi::{HDC, PS_SOLID, Rectangle};
+use windows::Win32::Graphics::Gdi::{HDC, PS_SOLID};
 
 use crate::consts::{PANEL_COLOR, SEG_OFF_COLOR, SEG_ON_COLOR};
-use crate::gdi::OwnedGdi;
+use crate::sys::drawing::fill_rect;
+use crate::sys::gdi::OwnedGdi;
 
 /// 数码管段的宽度。
 pub const SEG_WIDTH: i32 = 4;
@@ -123,10 +124,7 @@ fn draw_digit(hdc: HDC, x: i32, y: i32, digit: u8, palette: &Palette) {
         let _brush = palette.off_brush.select(hdc);
         let _pen = palette.off_pen.select(hdc);
         for &(dx, dy, w, h) in SEGMENT_RECTS.iter() {
-            // SAFETY: hdc 有效，矩形在窗口范围内。
-            unsafe {
-                let _ = Rectangle(hdc, x + dx, y + dy, x + dx + w, y + dy + h);
-            }
+            fill_rect(hdc, x + dx, y + dy, x + dx + w, y + dy + h);
         }
     }
 
@@ -135,10 +133,7 @@ fn draw_digit(hdc: HDC, x: i32, y: i32, digit: u8, palette: &Palette) {
         let _pen = palette.on_pen.select(hdc);
         for (bit, &(dx, dy, w, h)) in SEGMENT_RECTS.iter().enumerate() {
             if is_lit(digit, 1 << bit) {
-                // SAFETY: 同上。
-                unsafe {
-                    let _ = Rectangle(hdc, x + dx, y + dy, x + dx + w, y + dy + h);
-                }
+                fill_rect(hdc, x + dx, y + dy, x + dx + w, y + dy + h);
             }
         }
     }
@@ -150,23 +145,20 @@ fn draw_colon(hdc: HDC, x: i32, y: i32, palette: &Palette) {
     let _brush = palette.on_brush.select(hdc);
     let _pen = palette.on_pen.select(hdc);
 
-    // SAFETY: hdc 有效，矩形在窗口范围内。
-    unsafe {
-        let _ = Rectangle(
-            hdc,
-            x,
-            colon_y - COLON_SIZE - COLON_OFFSET_Y,
-            x + COLON_SIZE,
-            colon_y - COLON_OFFSET_Y,
-        );
-        let _ = Rectangle(
-            hdc,
-            x,
-            colon_y + COLON_OFFSET_Y,
-            x + COLON_SIZE,
-            colon_y + COLON_SIZE + COLON_OFFSET_Y,
-        );
-    }
+    fill_rect(
+        hdc,
+        x,
+        colon_y - COLON_SIZE - COLON_OFFSET_Y,
+        x + COLON_SIZE,
+        colon_y - COLON_OFFSET_Y,
+    );
+    fill_rect(
+        hdc,
+        x,
+        colon_y + COLON_OFFSET_Y,
+        x + COLON_SIZE,
+        colon_y + COLON_SIZE + COLON_OFFSET_Y,
+    );
 }
 
 #[cfg(test)]

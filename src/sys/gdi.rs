@@ -1,14 +1,11 @@
+//! GDI 对象的所有权与选入守卫。
+
 use std::marker::PhantomData;
 
 use windows::Win32::Foundation::COLORREF;
 use windows::Win32::Graphics::Gdi::{
     CreatePen, CreateSolidBrush, DeleteObject, HDC, HGDIOBJ, PEN_STYLE, SelectObject,
 };
-
-/// COLORREF 的字节序是 0x00BBGGRR。
-pub const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
-    COLORREF((r as u32) | ((g as u32) << 8) | ((b as u32) << 16))
-}
 
 /// 独占一个 GDI 对象，析构时 DeleteObject。
 pub struct OwnedGdi(HGDIOBJ);
@@ -29,7 +26,7 @@ impl OwnedGdi {
     /// 守卫借用 `self`，因此编译器保证 GDI 对象比守卫活得久，
     /// 不会出现“删除仍被选中的对象”。
     pub fn select<'a>(&'a self, hdc: HDC) -> Selected<'a> {
-        // SAFETY: hdc 由 BeginPaint 提供，self 在守卫生命周期内有效。
+        // SAFETY: hdc 由 PaintScope 提供，self 在守卫生命周期内有效。
         let prev = unsafe { SelectObject(hdc, self.0) };
         Selected {
             hdc,
@@ -64,17 +61,5 @@ impl Drop for Selected<'_> {
                 SelectObject(self.hdc, self.prev);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::rgb;
-
-    #[test]
-    fn rgb_uses_bbggrr_layout() {
-        assert_eq!(rgb(0x12, 0x34, 0x56).0, 0x0056_3412);
-        assert_eq!(rgb(0, 0, 0).0, 0);
-        assert_eq!(rgb(255, 255, 255).0, 0x00FF_FFFF);
     }
 }

@@ -1,3 +1,5 @@
+//! 托盘图标与右键菜单。
+
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, Shell_NotifyIconW,
@@ -18,7 +20,7 @@ pub struct TrayIcon {
 
 impl TrayIcon {
     pub fn add(hwnd: HWND, hinstance: HINSTANCE) -> Option<Self> {
-        // SAFETY: hinstance 有效；105 是图标资源 ID。
+        // SAFETY: hinstance 有效；IDI_ICON 是图标资源 ID。
         let icon = unsafe {
             LoadIconW(
                 Some(hinstance),

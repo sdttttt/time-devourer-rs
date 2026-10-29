@@ -2,7 +2,10 @@ use windows::Win32::Foundation::COLORREF;
 use windows::Win32::UI::WindowsAndMessaging::WM_USER;
 use windows::core::{PCWSTR, w};
 
-use crate::gdi::rgb;
+/// COLORREF 的字节序是 0x00BBGGRR。
+pub const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
+    COLORREF((r as u32) | ((g as u32) << 8) | ((b as u32) << 16))
+}
 
 // 窗口类与标题
 pub const CLASS_NAME: PCWSTR = w!("TimeWindowClass");
@@ -43,3 +46,15 @@ pub const ANIMATION_INTERVAL_MS: u32 = 10;
 
 // 整点前后显示提醒的半径：秒
 pub const SHOW_RADIUS_SEC: i32 = 30;
+
+#[cfg(test)]
+mod tests {
+    use super::rgb;
+
+    #[test]
+    fn rgb_uses_bbggrr_layout() {
+        assert_eq!(rgb(0x12, 0x34, 0x56).0, 0x0056_3412);
+        assert_eq!(rgb(0, 0, 0).0, 0);
+        assert_eq!(rgb(255, 255, 255).0, 0x00FF_FFFF);
+    }
+}
