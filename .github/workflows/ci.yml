@@ -1,0 +1,81 @@
+name: CI
+
+# 推送到 master / 任意 PR 时跑测试与编译；
+# 推送 tag 时额外把编译好的 exe 发到 GitHub Release。
+# 只想在版本 tag 上发布时，把 tags 改成 ["v*"] 即可。
+on:
+  push:
+    branches: [master]
+    tags: ["*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+# 同一 ref 的新运行会取消旧的运行；tag 与分支的 ref 不同，互不影响。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: 单元测试
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test
+        run: cargo test
+
+  build:
+    name: 编译
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo build --release
+        run: cargo build --release
+
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: time-devourer-windows-x64
+          path: target/release/time-devourer.exe
+          if-no-files-found: error
+
+  release:
+    name: 发布 Release
+    # 只在 tag 推送时运行，且必须等测试与编译都通过。
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, build]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载编译产物
+        uses: actions/download-artifact@v4
+        with:
+          name: time-devourer-windows-x64
+          path: dist
+
+      - name: 创建 Release 并附上二进制
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/time-devourer.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
