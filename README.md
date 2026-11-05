@@ -1,6 +1,6 @@
 # time-devourer-rs
 
-> 对比C++版本的time-devourer产物略大一些。补过依旧很小  `<200KB`
+> 对比C++版本的time-devourer产物略大一些。不过依旧很小  `<200KB`
 
 Rust + Win32 API（官方 `windows` crate）实现的桌面悬浮时钟（学习项目）。
 
